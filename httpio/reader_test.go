@@ -10,11 +10,10 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/require"
 
-	"github.com/filecoin-project/go-jsonrpc"
+	jsonrpc "github.com/caeret/go-jsonrpc"
 )
 
-type ReaderHandler struct {
-}
+type ReaderHandler struct{}
 
 func (h *ReaderHandler) ReadAll(ctx context.Context, r io.Reader) ([]byte, error) {
 	return io.ReadAll(r)

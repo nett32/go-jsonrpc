@@ -7,17 +7,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"reflect"
 
 	"go.opencensus.io/stats"
 	"go.opencensus.io/tag"
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/xerrors"
 
-	"github.com/filecoin-project/go-jsonrpc/metrics"
+	"github.com/caeret/go-jsonrpc/metrics"
 )
 
 type RawParams json.RawMessage
@@ -149,6 +148,7 @@ func (s *handler) register(namespace string, r interface{}) {
 // Handle
 
 type rpcErrFunc func(w func(func(io.Writer)), req *request, code ErrorCode, err error)
+
 type chanOut func(reflect.Value, interface{}) error
 
 func (s *handler) handleReader(ctx context.Context, r io.Reader, w io.Writer, rpcError rpcErrFunc) {
@@ -238,7 +238,7 @@ func doCall(methodName string, f reflect.Value, params []reflect.Value) (out []r
 	defer func() {
 		if i := recover(); i != nil {
 			err = xerrors.Errorf("panic in rpc method '%s': %s", methodName, i)
-			log.Desugar().WithOptions(zap.AddStacktrace(zapcore.ErrorLevel)).Sugar().Error(err)
+			slog.Error("do call", "error", err)
 		}
 	}()
 
@@ -256,12 +256,12 @@ func (s *handler) getSpan(ctx context.Context, req request) (context.Context, *t
 		bSC := make([]byte, base64.StdEncoding.DecodedLen(len(eSC)))
 		_, err := base64.StdEncoding.Decode(bSC, []byte(eSC))
 		if err != nil {
-			log.Errorf("SpanContext: decode", "error", err)
+			slog.Error("SpanContext: decode", "error", err)
 			return ctx, nil
 		}
 		sc, ok := propagation.FromBinary(bSC)
 		if !ok {
-			log.Errorf("SpanContext: could not create span", "data", bSC)
+			slog.Error("SpanContext: could not create span", "data", bSC)
 			return ctx, nil
 		}
 		ctx, span = trace.StartSpanWithRemoteParent(ctx, "api.handle", sc)
@@ -291,7 +291,7 @@ func (s *handler) createError(err error) *JSONRPCError {
 	case RPCErrorCodec:
 		o, err := m.ToJSONRPCError()
 		if err != nil {
-			log.Errorf("Failed to convert error to JSONRPCError: %w", err)
+			slog.Error(fmt.Sprintf("Failed to convert error to JSONRPCError: %s", err))
 		} else {
 			out = &o
 		}
@@ -300,7 +300,7 @@ func (s *handler) createError(err error) *JSONRPCError {
 		if marshalErr == nil {
 			out.Meta = meta
 		} else {
-			log.Errorf("Failed to marshal error metadata: %w", marshalErr)
+			slog.Error(fmt.Sprintf("Failed to marshal error metadata: %s", marshalErr))
 		}
 	}
 
@@ -422,7 +422,7 @@ func (s *handler) handle(ctx context.Context, req request, w func(func(io.Writer
 	if handler.errOut != -1 {
 		err := callResult[handler.errOut].Interface()
 		if err != nil {
-			log.Warnf("error in RPC call to '%s': %+v", req.Method, err)
+			slog.Warn("error in RPC call", "method", req.Method, "error", err)
 			stats.Record(ctx, metrics.RPCResponseError.M(1))
 
 			resp.Error = s.createError(err.(error))
@@ -451,7 +451,7 @@ func (s *handler) handle(ctx context.Context, req request, w func(func(io.Writer
 				return // channel goroutine handles responding
 			}
 
-			log.Warnf("failed to setup channel in RPC call to '%s': %+v", req.Method, err)
+			slog.Warn("failed to setup channel in RPC call", "method", req.Method, "error", err)
 			stats.Record(ctx, metrics.RPCResponseError.M(1))
 
 			resp.Error = &JSONRPCError{
@@ -463,12 +463,12 @@ func (s *handler) handle(ctx context.Context, req request, w func(func(io.Writer
 		}
 	}
 	if resp.Error != nil && nonZero {
-		log.Errorw("error and res returned", "request", req, "r.err", resp.Error, "res", res)
+		slog.Error("error and res returned", "request", req, "r.err", resp.Error, "res", res)
 	}
 
 	withLazyWriter(w, func(w io.Writer) {
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			log.Error(err)
+			slog.Error("withLazyWriter", "error", err)
 			stats.Record(ctx, metrics.RPCResponseError.M(1))
 			return
 		}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
@@ -12,13 +13,10 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	logging "github.com/ipfs/go-log/v2"
 	"golang.org/x/xerrors"
 
-	"github.com/filecoin-project/go-jsonrpc"
+	jsonrpc "github.com/caeret/go-jsonrpc"
 )
-
-var log = logging.Logger("rpc")
 
 func ReaderParamEncoder(addr string) jsonrpc.Option {
 	return jsonrpc.WithParamEncoder(new(io.Reader), func(value reflect.Value) (reflect.Value, error) {
@@ -33,17 +31,16 @@ func ReaderParamEncoder(addr string) jsonrpc.Option {
 
 			resp, err := http.Post(u.String(), "application/octet-stream", r)
 			if err != nil {
-				log.Errorf("sending reader param: %+v", err)
+				slog.Error("sending reader param", "error", err)
 				return
 			}
 
 			defer resp.Body.Close()
 
 			if resp.StatusCode != 200 {
-				log.Errorf("sending reader param: non-200 status: ", resp.Status)
+				slog.Error("sending reader param: non-200 status", "status", resp.Status)
 				return
 			}
-
 		}()
 
 		return reflect.ValueOf(reqID), nil
@@ -95,7 +92,7 @@ func ReaderParamDecoder() (http.HandlerFunc, jsonrpc.ServerOption) {
 		select {
 		case ch <- wr:
 		case <-req.Context().Done():
-			log.Error("context error in reader stream handler (1): %v", req.Context().Err())
+			slog.Error("context error in reader stream handler (1)", "error", req.Context().Err())
 			resp.WriteHeader(500)
 			return
 		}
@@ -103,7 +100,7 @@ func ReaderParamDecoder() (http.HandlerFunc, jsonrpc.ServerOption) {
 		select {
 		case <-wr.wait:
 		case <-req.Context().Done():
-			log.Error("context error in reader stream handler (2): %v", req.Context().Err())
+			slog.Error("context error in reader stream handler (2)", "error", req.Context().Err())
 			resp.WriteHeader(500)
 			return
 		}

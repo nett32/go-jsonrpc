@@ -2,13 +2,10 @@ package auth
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
-
-	logging "github.com/ipfs/go-log/v2"
 )
-
-var log = logging.Logger("auth")
 
 type Handler struct {
 	Verify func(ctx context.Context, token string) ([]Permission, error)
@@ -28,7 +25,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if token != "" {
 		if !strings.HasPrefix(token, "Bearer ") {
-			log.Warn("missing Bearer prefix in auth header")
+			slog.Warn("missing Bearer prefix in auth header")
 			w.WriteHeader(401)
 			return
 		}
@@ -36,7 +33,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		allow, err := h.Verify(ctx, token)
 		if err != nil {
-			log.Warnf("JWT Verification failed (originating from %s): %s", r.RemoteAddr, err)
+			slog.Warn("JWT Verification failed", "from", r.RemoteAddr, "error", err)
 			w.WriteHeader(401)
 			return
 		}

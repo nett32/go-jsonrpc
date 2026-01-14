@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -20,19 +21,12 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	logging "github.com/ipfs/go-log/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/xerrors"
 )
 
 func init() {
-	if _, exists := os.LookupEnv("GOLOG_LOG_LEVEL"); !exists {
-		if err := logging.SetLogLevel("rpc", "DEBUG"); err != nil {
-			panic(err)
-		}
-	}
-
 	debugTrace = true
 }
 
@@ -228,7 +222,6 @@ func TestRPCBadConnection(t *testing.T) {
 	require.True(t, errors.As(err, new(*RPCConnectionError)))
 
 	defer closer()
-
 }
 
 func TestRPC(t *testing.T) {
@@ -683,7 +676,7 @@ func (h *ChanHandler) Sub(ctx context.Context, i int, eq int) (<-chan int, error
 
 	wait := h.wait
 
-	log.Warnf("SERVER SUB!")
+	slog.Warn("SERVER SUB!")
 	go func() {
 		defer close(out)
 		var n int
@@ -694,7 +687,7 @@ func (h *ChanHandler) Sub(ctx context.Context, i int, eq int) (<-chan int, error
 				fmt.Println("ctxdone1", i, eq)
 				return
 			case <-wait:
-				//fmt.Println("CONSUMED WAIT: ", i)
+				// fmt.Println("CONSUMED WAIT: ", i)
 			}
 
 			n += i
@@ -773,13 +766,13 @@ func TestChan(t *testing.T) {
 	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
-	log.Warnf("last sub")
+	slog.Warn("last sub")
 	sub, err = client.Sub(ctx, 3, 6)
 	require.NoError(t, err)
 
-	log.Warnf("waiting for value now")
+	slog.Warn("waiting for value now")
 	require.Equal(t, 3, <-sub)
-	log.Warnf("not equal")
+	slog.Warn("not equal")
 
 	// close (remote)
 	serverHandler.wait <- struct{}{}
@@ -955,8 +948,7 @@ func TestServerChanLockClose(t *testing.T) {
 	<-serverHandler.ctxdone
 }
 
-type StreamingHandler struct {
-}
+type StreamingHandler struct{}
 
 func (h *StreamingHandler) GetData(ctx context.Context, n int) (<-chan int, error) {
 	out := make(chan int)
@@ -1020,17 +1012,9 @@ func TestChanClientReceiveAll(t *testing.T) {
 
 	tcancel()
 	testServ.Close()
-
 }
 
 func TestControlChanDeadlock(t *testing.T) {
-	if _, exists := os.LookupEnv("GOLOG_LOG_LEVEL"); !exists {
-		_ = logging.SetLogLevel("rpc", "error")
-		defer func() {
-			_ = logging.SetLogLevel("rpc", "DEBUG")
-		}()
-	}
-
 	for r := 0; r < 20; r++ {
 		testControlChanDeadlock(t)
 	}
@@ -1091,8 +1075,7 @@ func testControlChanDeadlock(t *testing.T) {
 	<-done
 }
 
-type InterfaceHandler struct {
-}
+type InterfaceHandler struct{}
 
 func (h *InterfaceHandler) ReadAll(ctx context.Context, r io.Reader) ([]byte, error) {
 	return io.ReadAll(r)
@@ -1353,8 +1336,7 @@ func TestNotif(t *testing.T) {
 	t.Run("http", tc("http"))
 }
 
-type RawParamHandler struct {
-}
+type RawParamHandler struct{}
 
 type CustomParams struct {
 	I int
@@ -1397,8 +1379,7 @@ func TestCallWithRawParams(t *testing.T) {
 	closer()
 }
 
-type RevCallTestServerHandler struct {
-}
+type RevCallTestServerHandler struct{}
 
 func (h *RevCallTestServerHandler) Call(ctx context.Context) error {
 	revClient, ok := ExtractReverseClient[RevCallTestClientProxy](ctx)
@@ -1422,8 +1403,7 @@ type RevCallTestClientProxy struct {
 	CallOnClient func(int) (int, error)
 }
 
-type RevCallTestClientHandler struct {
-}
+type RevCallTestClientHandler struct{}
 
 func (h *RevCallTestClientHandler) CallOnClient(a int) (int, error) {
 	return a * 2, nil
@@ -1457,8 +1437,7 @@ func TestReverseCall(t *testing.T) {
 	closer()
 }
 
-type RevCallTestServerHandlerAliased struct {
-}
+type RevCallTestServerHandlerAliased struct{}
 
 func (h *RevCallTestServerHandlerAliased) Call(ctx context.Context) error {
 	revClient, ok := ExtractReverseClient[RevCallTestClientProxyAliased](ctx)
@@ -1569,8 +1548,7 @@ func TestReverseCallDroppedConn(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 }
 
-type BigCallTestServerHandler struct {
-}
+type BigCallTestServerHandler struct{}
 
 type RecRes struct {
 	I int

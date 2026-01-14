@@ -3,6 +3,7 @@ package jsonrpc
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"reflect"
 )
 
@@ -68,12 +69,12 @@ func (e *JSONRPCError) val(errors *Errors) reflect.Value {
 
 			if v.Type().Implements(errorCodecRT) {
 				if err := v.Interface().(RPCErrorCodec).FromJSONRPCError(*e); err != nil {
-					log.Errorf("Error converting JSONRPCError to custom error type '%s' (code %d): %w", t.String(), e.Code, err)
+					slog.Error(fmt.Sprintf("Error converting JSONRPCError to custom error type '%s' (code %d): %s", t.String(), e.Code, err))
 					return reflect.ValueOf(e)
 				}
 			} else if len(e.Meta) > 0 && v.Type().Implements(marshalableRT) {
 				if err := v.Interface().(marshalable).UnmarshalJSON(e.Meta); err != nil {
-					log.Errorf("Error unmarshalling error metadata to custom error type '%s' (code %d): %w", t.String(), e.Code, err)
+					slog.Error(fmt.Sprintf("Error unmarshalling error metadata to custom error type '%s' (code %d): %s", t.String(), e.Code, err))
 					return reflect.ValueOf(e)
 				}
 			}
